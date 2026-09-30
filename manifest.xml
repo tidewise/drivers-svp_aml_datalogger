@@ -1,0 +1,10 @@
+<package>
+  <description brief="Driver for connecting and reading from a AML SVP">
+  
+  </description>
+  <author>/</author>
+  <license></license>
+  <url>http://</url>
+  <logo>http://</logo>
+  <depend package="base/cmake" />
+</package>
