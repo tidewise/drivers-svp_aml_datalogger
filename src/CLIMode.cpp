@@ -14,15 +14,30 @@ namespace svp_aml_datalogger {
         return !msg.empty() && msg[0] == PROMPT;
     }
 
+    string measureCommand(MonitorFormat const& format)
+    {
+        return format == COLUMNS ? "monitor" : "mmonitor";
+    }
+
     string samplePerSecondCommand(float samples_per_s)
     {
         ostringstream builder;
         builder << "set sample ";
         if (samples_per_s >= 1) {
             builder << round(samples_per_s) << " /second";
+            return builder.str();
+        }
+
+        int interval = static_cast<int>(round(1.0 / samples_per_s));
+        if (interval > 3600) {
+            interval = round(interval / 3600);
+            builder << interval << " hours";
+        }
+        else if (interval > 60) {
+            interval = round(interval / 60);
+            builder << interval << " minutes";
         }
         else {
-            int interval = static_cast<int>(round(1.0 / samples_per_s));
             builder << interval << " seconds";
         }
         return builder.str();
@@ -43,8 +58,8 @@ namespace svp_aml_datalogger {
                 commands.push_back("set trigger sound");
                 {
                     ostringstream out;
-                    out << "set sound inc " << sampling_trigger.sound_velocity_increment
-                        << setprecision(2);
+                    out << "set sound inc " << setprecision(2)
+                        << sampling_trigger.sound_velocity_increment;
                     commands.push_back(out.str());
                 }
                 break;
@@ -52,9 +67,8 @@ namespace svp_aml_datalogger {
                 commands.push_back("set trigger pressure");
                 {
                     ostringstream out;
-                    out << "set pressure inc "
-                        << sampling_trigger.pressure_increment.toBar() * 10
-                        << setprecision(2);
+                    out << "set pressure inc " << setprecision(2)
+                        << sampling_trigger.pressure_increment.toBar() * 10;
                     commands.push_back(out.str());
                 }
                 break;
@@ -67,8 +81,8 @@ namespace svp_aml_datalogger {
         vector<string> commands;
 
         ostringstream interval;
-        interval << "set burst interval " << burst_parameters.burst_interval.toSeconds()
-                 << setprecision(2);
+        interval << "set burst interval " << setprecision(2)
+                 << burst_parameters.burst_interval.toSeconds();
         commands.push_back(interval.str());
 
         ostringstream samples;
@@ -144,10 +158,10 @@ namespace svp_aml_datalogger {
         ostringstream out;
         out << "set derive " << parameter;
         if ((bitfield & bit) != 0) {
-            out << " y";
+            out << "y";
         }
         else {
-            out << " n";
+            out << "n";
         }
         return out.str();
     }
@@ -218,15 +232,14 @@ namespace svp_aml_datalogger {
         format << "set monitor format " << format_str;
         commands.push_back(format.str());
 
-        string robust = parameters.robust ? " y" : " n";
+        string robust = parameters.robust ? "y" : "n";
         ostringstream robust_str;
         robust_str << "set monitor robust " << robust;
         commands.push_back(robust_str.str());
 
         ostringstream start_inactivity;
-        start_inactivity << "set monitor auto "
-                         << parameters.auto_start_after_inactivity.toSeconds()
-                         << setprecision(2);
+        start_inactivity << "set monitor auto " << setprecision(2)
+                         << parameters.auto_start_after_inactivity.toSeconds();
         commands.push_back(start_inactivity.str());
 
         // Hardcode these to be consistent with the driver implementation

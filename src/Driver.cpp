@@ -133,7 +133,7 @@ std::string Driver::sendCommandAndWaitForReply(std::string command,
     const base::Time& timeout)
 {
     try {
-        sendCommand(command, m_write_timeout);
+        sendCommand(command, timeout);
         return readUntilPrompt(m_read_timeout);
     }
     catch (CommandRejectedException const& e) {
@@ -259,6 +259,7 @@ std::string Driver::readUntilPrompt(Time const& timeout)
         if (isPrompt(trimmed)) {
             return accumulated;
         }
+        now = Time::now();
     }
     throw iodrivers_base::TimeoutError(iodrivers_base::TimeoutError::PACKET,
         "readUntilPrompt timed out waiting for PROMPT");

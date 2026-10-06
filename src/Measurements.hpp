@@ -83,9 +83,9 @@ namespace svp_aml_datalogger {
         /** Calibration accuracy specification */
         std::string accuracy;
         /** Minimum range value supported by this sensor */
-        double range_min;
+        double range_min = base::unknown<double>();
         /** Maximum range value supported by this sensor */
-        double range_max;
+        double range_max = base::unknown<double>();
     };
 
     /**

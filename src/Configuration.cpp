@@ -200,11 +200,26 @@ Configuration svp_aml_datalogger::parseDisplayOptions(std::string const& raw_tex
         if (options.count("SensorSampleRateUnits")) {
             units = options["SensorSampleRateUnits"];
         }
-        if (units == "/sec") {
+        if (units == "/sec" || units == "/second") {
             config.sampling_trigger.samples_per_s = rate;
         }
-        else if (units == "sec") {
+        else if (units == "sec" || units == "seconds") {
             config.sampling_trigger.samples_per_s = 1.0f / rate;
+        }
+        else if (units == "/min" || units == "/minute") {
+            config.sampling_trigger.samples_per_s = rate / 60;
+        }
+        else if (units == "min" || units == "minutes") {
+            config.sampling_trigger.samples_per_s = 1.0f / (60 * rate);
+        }
+        else if (units == "/hour") {
+            config.sampling_trigger.samples_per_s = rate / 3600;
+        }
+        else if (units == "hours") {
+            config.sampling_trigger.samples_per_s = 1.0f / (3600 * rate);
+        }
+        else if (units == "max") {
+            config.sampling_trigger.samples_per_s = 20;
         }
         else {
             config.sampling_trigger.samples_per_s = rate;

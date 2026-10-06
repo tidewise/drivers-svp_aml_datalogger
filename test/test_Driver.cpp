@@ -458,19 +458,8 @@ TEST(DriverTest, it_parses_display_sensors_text_correctly)
 
 TEST(DriverTest, it_parses_all_remaining_telemetry_columns)
 {
-    std::string payload = "2026-09-16,11:26:01.10,1.25,12.4,0.45,done,35.12,1024.5";
-    auto add_checksum = [](std::string const& p) -> std::string {
-        uint8_t checksum = 0;
-        for (char c : p) {
-            checksum ^= static_cast<uint8_t>(c);
-        }
-        char buf[16];
-        std::sprintf(buf, "*%02X", checksum);
-        return p + buf;
-    };
-
-    std::string line = add_checksum(payload);
-    Measurements m = Driver::parseMeasurementLine(line,
+    std::string payload = "2026-09-16,11:26:01.10,1.25,12.4,0.45,done,35.12,1024.5*27";
+    Measurements m = Driver::parseMeasurementLine(payload,
         {MEASURE_DATE,
             MEASURE_TIME,
             MEASURE_BATTERY_CURRENT,
@@ -491,8 +480,8 @@ TEST(DriverTest, it_parses_all_remaining_telemetry_columns)
 
     // Verify charge state is false when it is not "done"
     std::string payload_charging =
-        "2026-09-16,11:26:01.10,1.25,12.4,0.45,charging,35.12,1024.5";
-    Measurements m_charging = Driver::parseMeasurementLine(add_checksum(payload_charging),
+        "2026-09-16,11:26:01.10,1.25,12.4,0.45,charging,35.12,1024.5*38";
+    Measurements m_charging = Driver::parseMeasurementLine(payload_charging,
         {MEASURE_DATE,
             MEASURE_TIME,
             MEASURE_BATTERY_CURRENT,
@@ -654,4 +643,302 @@ TEST(ConfigurationTest, it_parses_display_options_correctly)
     ASSERT_EQ(AMLX, config.monitor_parameters.monitor_format);
     ASSERT_TRUE(config.monitor_parameters.robust);
     ASSERT_EQ(60.0, config.monitor_parameters.auto_start_after_inactivity.toSeconds());
+}
+
+double parseSampleRate(std::string const& rate, std::string const& units)
+{
+    std::string text = "[Header]\n"
+                       "ScanMode=Single\n"
+                       "ScanTrigger=Time\n"
+                       "SensorSampleRate=" +
+                       rate + "\n";
+    if (!units.empty()) {
+        text += "SensorSampleRateUnits=" + units + "\n";
+    }
+    text += ">\n";
+    Configuration config = parseDisplayOptions(text);
+    return config.sampling_trigger.samples_per_s;
+}
+
+TEST(ConfigurationTest, it_parses_sample_rate_units_correctly)
+{
+
+    // Frequency per second: /sec, /second
+    ASSERT_NEAR(20.0, parseSampleRate("20", "/sec"), 1e-5);
+    ASSERT_NEAR(2.0, parseSampleRate("2", "/sec"), 1e-5);
+    ASSERT_NEAR(2.5, parseSampleRate("2.5", "/second"), 1e-5);
+
+    // Period in seconds: sec, seconds
+    ASSERT_NEAR(0.5, parseSampleRate("2", "seconds"), 1e-5);
+    ASSERT_NEAR(0.1, parseSampleRate("10", "sec"), 1e-5);
+    ASSERT_NEAR(1.0, parseSampleRate("1", "seconds"), 1e-5);
+
+    // Frequency per minute: /min, /minute
+    ASSERT_NEAR(0.5, parseSampleRate("30", "/min"), 1e-5);
+    ASSERT_NEAR(1.0, parseSampleRate("60", "/minute"), 1e-5);
+    ASSERT_NEAR(0.1, parseSampleRate("6", "/min"), 1e-5);
+
+    // Period in minutes: min, minutes (1 / (60 * rate))
+    ASSERT_NEAR(1.0 / 120.0, parseSampleRate("2", "minutes"), 1e-7);
+    ASSERT_NEAR(1.0 / 60.0, parseSampleRate("1", "min"), 1e-7);
+    ASSERT_NEAR(1.0 / 600.0, parseSampleRate("10", "minutes"), 1e-7);
+
+    // Frequency per hour: /hour
+    ASSERT_NEAR(360.0 / 3600.0, parseSampleRate("360", "/hour"), 1e-5);
+    ASSERT_NEAR(1800.0 / 3600.0, parseSampleRate("1800", "/hour"), 1e-5);
+
+    // Period in hours: hours (1 / (3600 * rate))
+    ASSERT_NEAR(1.0 / 7200.0, parseSampleRate("2", "hours"), 1e-9);
+    ASSERT_NEAR(1.0 / 3600.0, parseSampleRate("1", "hours"), 1e-9);
+
+    // Max frequency
+    ASSERT_NEAR(20.0, parseSampleRate("0", "max"), 1e-5);
+
+    // Default when units are omitted
+    ASSERT_NEAR(5.0, parseSampleRate("5", ""), 1e-5);
+}
+
+TEST(ConfigurationTest, it_parses_real_world_aml_display_options)
+{
+    // Verbatim text extracted from display options in aml_log_2026-09-16_11-26-01.aml
+    std::string text = "CfgSaveAlarmSec=1\n"
+                       "BatShutdownThres=6.20\n"
+                       "BatWarningThres=6.90\n"
+                       "Model=AML-3\n"
+                       "SerialNumber=A30648\n"
+                       "WifiSsid=AML_A30648\n"
+                       "WapStopDelaySec=60\n"
+                       "UpdateStatus=0\n"
+                       "MinimumSleepTimeSecs=40\n"
+                       "MuxVersion=3.1.9\n"
+                       "HardwareVersion=01\n"
+                       "Firmware=3.1.2\n"
+                       "USBMacAddress=\n"
+                       "Type=Logger\n"
+                       "WakeOnPower=no\n"
+                       "BatVNoBoot=0.00\n"
+                       "BatINoBoot=0\n"
+                       "ChgIntEna=yes\n"
+                       "PWRRev=2\n"
+                       "GPSEnabled=yes\n"
+                       "WiFiEnabled=yes\n"
+                       "UserBaudrate=115200\n"
+                       "SampleRateHzMax=20\n"
+                       "SensorSampleRate=2\n"
+                       "SensorSampleRateUnits=/sec\n"
+                       "ScanRateMillisecs=500\n"
+                       "SampleRateMillisecs=50\n"
+                       "SampleScanRatio=10\n"
+                       "BurstIntervalSecs=30\n"
+                       "BurstSamples=10\n"
+                       "BurstMonitor=Samples\n"
+                       "ScanTrigger=Time\n"
+                       "ScanMode=Single\n"
+                       "LogMode=Auto\n"
+                       "LogFileType=Columns\n"
+                       "DateFormat=yyyy-mm-dd\n"
+                       "WifiPassword=A30648A30648\n"
+                       "GnssMgaDbdAssist=yes\n"
+                       "GnssOfflineAssist=yes\n"
+                       "LocationMode=Instrument\n"
+                       "Latitude=0.00000\n"
+                       "Longitude=0.00000\n"
+                       "SvWaterThreshold=1000.00\n"
+                       "SvWetCount=3\n"
+                       "SvDryCount=7\n"
+                       "CndWaterThreshold=0.30\n"
+                       "CndWetCount=3\n"
+                       "CndDryCount=7\n"
+                       "PrsWaterThreshold=99999.00\n"
+                       "PrsWetCount=3\n"
+                       "PrsDryCount=7\n"
+                       "SoundInc=0.00\n"
+                       "PressureInc=0.50\n"
+                       "DeriveDensity=no\n"
+                       "DeriveDepth=yes\n"
+                       "DeriveSoundvelocity=yes\n"
+                       "DeriveSalinity_C=no\n"
+                       "DeriveSalinity_SV=no\n"
+                       "DisplayDate=yes\n"
+                       "DisplayTime=yes\n"
+                       "DisplayBattery=no\n"
+                       "DisplayDensity=no\n"
+                       "DisplayDepth=yes\n"
+                       "DisplaySalinity=no\n"
+                       "DisplaySoundVelocity=yes\n"
+                       "DisplayRawValues=yes\n"
+                       "RelayMode=RS232 mode\n"
+                       "UsePressureOffset=no\n"
+                       "PowerOffTimeout=0\n"
+                       "MonitorFormat=columns\n"
+                       "MonitorCustomColumns=\n"
+                       "MonitorDelimiter=comma\n"
+                       "AutoMonitor=0\n"
+                       "StartupMonitor=no\n"
+                       "RobustMonitor=no\n"
+                       "MonitorLog=no\n"
+                       "MonitorChecksum=no\n"
+                       "SleepMode=no\n"
+                       "SleepDelay=5\n"
+                       "StartupPrompt=yes\n"
+                       "SendWakeUpEnable=no\n"
+                       "SendWakeUpDelay=0\n"
+                       "SendWakeUpChars=\n"
+                       "SDfilesys=ext4\n"
+                       "TotalMemory=29288869888\n"
+                       "MemoryUsed=83857408\n"
+                       "UvEnabled=no\n"
+                       "UvOnTime=0\n"
+                       "UvOffTime=0\n"
+                       "GPSLatitude=-25.50151\n"
+                       "GPSLongitude=-48.51445\n"
+                       "GPSHDOP=0.57\n"
+                       "GeoLocationSource=Instrument\n"
+                       ">\n";
+
+    Configuration config = parseDisplayOptions(text);
+
+    ASSERT_EQ(SINGLE, config.sampling_mode);
+    ASSERT_EQ(BY_TIME, config.sampling_trigger.mode);
+    ASSERT_NEAR(2.0, config.sampling_trigger.samples_per_s, 1e-5);
+    ASSERT_NEAR(0.05, config.sampling_trigger.pressure_increment.toBar(), 1e-5);
+    ASSERT_EQ(30.0, config.burst_parameters.burst_interval.toSeconds());
+    ASSERT_EQ(10, config.burst_parameters.samples_per_burst);
+    ASSERT_EQ(SAMPLES, config.burst_parameters.monitor);
+
+    ASSERT_TRUE((config.measured_parameters & DATE) != 0);
+    ASSERT_TRUE((config.measured_parameters & TIME) != 0);
+    ASSERT_TRUE((config.measured_parameters & DEPTH) != 0);
+    ASSERT_TRUE((config.measured_parameters & SOUND_VELOCITY) != 0);
+    ASSERT_FALSE((config.measured_parameters & BATTERY_VOLTAGE) != 0);
+    ASSERT_FALSE((config.measured_parameters & SALINITY) != 0);
+    ASSERT_FALSE((config.measured_parameters & DENSITY) != 0);
+
+    ASSERT_TRUE((config.derived_parameters & DEPTH_FROM_PRESSURE) != 0);
+    ASSERT_TRUE((config.derived_parameters & SOUND_VELOCITY_FROM_SALINITY) != 0);
+    ASSERT_FALSE((config.derived_parameters & SALINITY_FROM_CONDUCTIVITY) != 0);
+    ASSERT_FALSE((config.derived_parameters & SALINITY_FROM_SOUND_VELOCITY) != 0);
+    ASSERT_FALSE((config.derived_parameters & DENSITY_FROM_SALINITY) != 0);
+
+    ASSERT_EQ(COLUMNS, config.monitor_parameters.monitor_format);
+    ASSERT_FALSE(config.monitor_parameters.robust);
+    ASSERT_EQ(0.0, config.monitor_parameters.auto_start_after_inactivity.toSeconds());
+}
+
+TEST(CLIModeTest, it_generates_sample_rate_command_for_frequencies_at_or_above_1hz)
+{
+    ASSERT_EQ("set sample 20 /second", samplePerSecondCommand(20.0f));
+    ASSERT_EQ("set sample 2 /second", samplePerSecondCommand(2.0f));
+    ASSERT_EQ("set sample 1 /second", samplePerSecondCommand(1.0f));
+}
+
+TEST(CLIModeTest, it_generates_sample_rate_command_for_intervals_in_seconds)
+{
+    ASSERT_EQ("set sample 2 seconds", samplePerSecondCommand(0.5f));
+    ASSERT_EQ("set sample 10 seconds", samplePerSecondCommand(0.1f));
+    ASSERT_EQ("set sample 50 seconds", samplePerSecondCommand(1.0f / 50.0f));
+}
+
+TEST(CLIModeTest, it_generates_sample_rate_command_for_intervals_in_minutes)
+{
+    ASSERT_EQ("set sample 2 minutes", samplePerSecondCommand(1.0f / 120.0f));
+    ASSERT_EQ("set sample 10 minutes", samplePerSecondCommand(1.0f / 600.0f));
+    ASSERT_EQ("set sample 30 minutes", samplePerSecondCommand(1.0f / 1800.0f));
+}
+
+TEST(CLIModeTest, it_generates_sample_rate_command_for_intervals_in_hours)
+{
+    ASSERT_EQ("set sample 2 hours", samplePerSecondCommand(1.0f / 7200.0f));
+    ASSERT_EQ("set sample 4 hours", samplePerSecondCommand(1.0f / 14400.0f));
+}
+
+TEST(CLIModeTest, it_generates_single_sampling_mode_commands)
+{
+    SamplingTriggerParameters trigger;
+    trigger.mode = BY_TIME;
+    trigger.samples_per_s = 5.0f;
+
+    auto cmds_time = singleSamplingModeCommands(trigger);
+    ASSERT_EQ(3, cmds_time.size());
+    ASSERT_EQ("set scan mode single", cmds_time[0]);
+    ASSERT_EQ("set trigger time", cmds_time[1]);
+    ASSERT_EQ("set sample 5 /second", cmds_time[2]);
+
+    trigger.mode = BY_SOUND_VELOCITY_INCREMENT;
+    trigger.sound_velocity_increment = 0.25f;
+    auto cmds_sv = singleSamplingModeCommands(trigger);
+    ASSERT_EQ(3, cmds_sv.size());
+    ASSERT_EQ("set scan mode single", cmds_sv[0]);
+    ASSERT_EQ("set trigger sound", cmds_sv[1]);
+    ASSERT_EQ("set sound inc 0.25", cmds_sv[2]);
+
+    trigger.mode = BY_PRESSURE_INCREMENT;
+    trigger.pressure_increment = base::Pressure::fromBar(0.1); // 1.0 dbar
+    auto cmds_p = singleSamplingModeCommands(trigger);
+    ASSERT_EQ(3, cmds_p.size());
+    ASSERT_EQ("set scan mode single", cmds_p[0]);
+    ASSERT_EQ("set trigger pressure", cmds_p[1]);
+    ASSERT_EQ("set pressure inc 1", cmds_p[2]);
+}
+
+TEST(CLIModeTest, it_generates_burst_sampling_mode_commands)
+{
+    SamplingTriggerParameters trigger;
+    trigger.mode = BY_TIME;
+    trigger.samples_per_s = 10.0f;
+
+    BurstModeParameters burst;
+    burst.burst_interval = base::Time::fromSeconds(60);
+    burst.samples_per_burst = 20;
+    burst.monitor = SAMPLES;
+
+    auto cmds = burstSamplingModeCommands(trigger, burst);
+    ASSERT_EQ(6, cmds.size());
+    ASSERT_EQ("set scan mode burst", cmds[0]);
+    ASSERT_EQ("set trigger time", cmds[1]);
+    ASSERT_EQ("set sample 10 /second", cmds[2]);
+    ASSERT_EQ("set burst interval 60", cmds[3]);
+    ASSERT_EQ("set burst samples 20", cmds[4]);
+    ASSERT_EQ("set burst monitor samples", cmds[5]);
+
+    burst.monitor = AVERAGE;
+    auto cmds_avg = burstSamplingModeCommands(trigger, burst);
+    ASSERT_EQ("set burst monitor average", cmds_avg[5]);
+}
+
+TEST(CLIModeTest, it_generates_measuring_command)
+{
+    ASSERT_EQ("monitor", measureCommand(COLUMNS));
+    ASSERT_EQ("mmonitor", measureCommand(AMLX));
+}
+
+TEST(CLIModeTest, it_checks_prompts_correctly)
+{
+    ASSERT_TRUE(isPrompt(">"));
+    ASSERT_TRUE(isPrompt("> "));
+    ASSERT_FALSE(isPrompt("data"));
+    ASSERT_FALSE(isPrompt(""));
+}
+
+TEST(CLIModeTest, it_generates_monitoring_parameters_commands)
+{
+    MonitoringParameters params;
+    params.monitor_format = COLUMNS;
+    params.robust = false;
+    params.auto_start_after_inactivity = base::Time::fromSeconds(30);
+
+    auto cmds = monitoringParametersCommands(params);
+    ASSERT_EQ(6, cmds.size());
+    ASSERT_EQ("set monitor format columns", cmds[0]);
+    ASSERT_EQ("set monitor robust n", cmds[1]);
+    ASSERT_EQ("set monitor auto 30", cmds[2]);
+    ASSERT_EQ("set monitor startup n", cmds[3]);
+    ASSERT_EQ("set monitor checksum y", cmds[4]);
+    ASSERT_EQ("set monitor delimiter comma", cmds[5]);
+
+    params.monitor_format = AMLX;
+    params.robust = true;
+    auto cmds_amlx = monitoringParametersCommands(params);
+    ASSERT_EQ("set monitor format amlx", cmds_amlx[0]);
+    ASSERT_EQ("set monitor robust y", cmds_amlx[1]);
 }
