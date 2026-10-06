@@ -1,4 +1,7 @@
 #include <base/Pressure.hpp>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 #include <svp_aml_datalogger/Columns.hpp>
 #include <svp_aml_datalogger/Measurements.hpp>
 
@@ -25,54 +28,42 @@ namespace svp_aml_datalogger {
 
     base::Time parseTime(std::string date_str, std::string time_data)
     {
-        std::string trimmed_date = trim(date_str);
-        if (trimmed_date.length() != 10) {
-            throw std::runtime_error("Invalid date format length: " + trimmed_date);
-        }
-        if (trimmed_date[4] != '-' || trimmed_date[7] != '-') {
-            throw std::runtime_error("Invalid date delimiters: " + trimmed_date);
-        }
-        int year = 0, month = 0, day = 0;
-        char extra;
-        if (std::sscanf(trimmed_date.c_str(),
-                "%d-%d-%d%c",
-                &year,
-                &month,
-                &day,
-                &extra) != 3) {
-            throw std::runtime_error("Failed to parse date: " + trimmed_date);
-        }
-        if (month < 1 || month > 12 || day < 1 || day > 31) {
-            throw std::runtime_error("Invalid date values in: " + trimmed_date);
+        std::istringstream ss(date_str + " " + time_data);
+        std::tm t = {};
+        ss >> std::get_time(&t, "%Y-%m-%d %H:%M:%S");
+        if (ss.fail()) {
+            throw std::runtime_error("Failed to parse time: " + ss.str());
         }
 
-        std::string trimmed_time = trim(time_data);
-        if (trimmed_time.length() < 8) {
-            throw std::runtime_error("Invalid time format length: " + trimmed_time);
-        }
-        if (trimmed_time[2] != ':' || trimmed_time[5] != ':') {
-            throw std::runtime_error("Invalid time delimiters: " + trimmed_time);
-        }
-        int hour = 0, minute = 0;
-        double seconds_val = 0.0;
-        if (std::sscanf(trimmed_time.c_str(),
-                "%d:%d:%lf%c",
-                &hour,
-                &minute,
-                &seconds_val,
-                &extra) != 3) {
-            throw std::runtime_error("Failed to parse time: " + trimmed_time);
-        }
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || seconds_val < 0.0 ||
-            seconds_val >= 60.0) {
-            throw std::runtime_error("Invalid time values in: " + trimmed_time);
+        int millis = 0;
+        if (ss.peek() == '.') {
+            // Consume '.'
+            ss.get();
+            std::string millis_str;
+            ss >> millis_str;
+            if (ss.fail()) {
+                throw std::runtime_error(
+                    "Failed to parse time milliseconds: " + ss.str());
+            }
+
+            float millis_f = 0;
+            std::istringstream millis_ss("0." + millis_str);
+            millis_ss >> millis_f;
+            millis = millis_f * 1000;
+            if (millis_ss.fail()) {
+                throw std::runtime_error(
+                    "Failed to parse time milliseconds: " + ss.str());
+            }
         }
 
-        int sec = static_cast<int>(seconds_val);
-        float sec_decimals = seconds_val - sec;
-        int millis = static_cast<int>(round(sec_decimals * 1000.0));
-
-        return base::Time::fromTimeValues(year, month, day, hour, minute, sec, millis, 0);
+        return base::Time::fromTimeValues(t.tm_year + 1900, // tm counts years from 1900
+            t.tm_mon + 1,                                   // tm months start from 0
+            t.tm_mday,
+            t.tm_hour,
+            t.tm_min,
+            t.tm_sec,
+            millis,
+            0);
     }
 
     std::string parseChargeState(std::string data)

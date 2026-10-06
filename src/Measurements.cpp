@@ -53,7 +53,7 @@ namespace svp_aml_datalogger {
         }
     }
 
-    SensorMetadata parseSensorMetadata(std::string const& line)
+    std::vector<std::string> parseSensorMetadata(std::string const& line)
     {
         std::string trimmed = trim(line);
         size_t eq_pos = trimmed.find('=');
@@ -67,7 +67,7 @@ namespace svp_aml_datalogger {
         while (std::getline(stream, col, ',')) {
             columns.push_back(trim(col));
         }
-        return SensorMetadata{columns};
+        return {columns};
     }
 
     SensorData parseSensorData(std::string const& line)
@@ -167,7 +167,10 @@ namespace svp_aml_datalogger {
             case MEASURE_SOUND_VELOCITY:
                 return "SV";
         }
-        return "Unknown";
+
+        std::ostringstream msg;
+        msg << "Unknown measured parameter: " << param;
+        throw std::invalid_argument(msg.str());
     }
 
     bool hasColumn(std::vector<MeasuredParameters> const& cols,
@@ -209,6 +212,7 @@ namespace svp_aml_datalogger {
     ParsedDisplaySensors parseDisplaySensors(std::string const& raw_text)
     {
         ParsedDisplaySensors parsed;
+        parsed.time = base::Time::now();
         std::istringstream stream(raw_text);
         std::string line;
         enum Section {

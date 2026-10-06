@@ -63,14 +63,6 @@ namespace svp_aml_datalogger {
     };
 
     /**
-     * @brief Structure representing metadata for the connected sensors list.
-     */
-    struct SensorMetadata {
-        /** The names of the columns defining the sensor parameters */
-        std::vector<std::string> columns;
-    };
-
-    /**
      * @brief Detailed information of an individual sensor configuration.
      */
     struct SensorData {
@@ -111,8 +103,9 @@ namespace svp_aml_datalogger {
      * configuration.
      */
     struct ParsedDisplaySensors {
-        /** Layout columns for the physical sensors */
-        SensorMetadata sensor_metadata;
+        base::Time time;
+        /** The names of the columns defining the sensor parameters */
+        std::vector<std::string> sensor_metadata;
         /** Specifications for each individual sensor */
         std::vector<SensorData> sensor_data;
         /** Layout columns and units for standard telemetry output */
@@ -136,7 +129,7 @@ namespace svp_aml_datalogger {
      * @param line A single metadata string line, e.g., "Columns=Port,Model,..."
      * @return Structured SensorMetadata containing individual column names.
      */
-    SensorMetadata parseSensorMetadata(std::string const& line);
+    std::vector<std::string> parseSensorMetadata(std::string const& line);
 
     /**
      * @brief Parses a comma-separated row of sensor characteristics.

@@ -136,6 +136,8 @@ namespace svp_aml_datalogger {
      * @brief Comprehensive configuration structure for the AML SVP device.
      */
     struct Configuration {
+        uint32_t baud_rate = 115200;
+
         /** Active sampling mode (continuous single vs burst) */
         SamplingMode sampling_mode = SINGLE;
         /** Parameters for trigger mode setting */

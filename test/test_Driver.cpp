@@ -1,5 +1,5 @@
-#include "base/Time.hpp"
 #include <base/Pressure.hpp>
+#include <base/Time.hpp>
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <svp_aml_datalogger/Driver.hpp>
@@ -211,7 +211,7 @@ TEST_F(TestDriverStartMeasuring, it_starts_measuring_and_enforces_correct_config
     writeMockData("[MeasurementMetadata]\n"
                   "Columns=Date,Time,Vbat,Pressure,SV,Depth\n"
                   "Units=yyyy-mm-dd,hh:mm:ss.ss,V,dBar,m/s,m\n"
-                  "[MeasurementData]\n>\n>\n");
+                  "[MeasurementData]\n>\n>");
     auto metadata = driver->displaySensorsParsed();
     ASSERT_NO_THROW(driver->startMeasuring(metadata));
     ASSERT_EQ(readWrittenCommand(), "display sensors\rmonitor\r");
@@ -229,7 +229,7 @@ TEST_F(TestDriverStartMeasuring,
     writeMockData("[MeasurementMetadata]\n"
                   "Columns=Time,Date,SV,Depth,Vbat,Pressure\n"
                   "Units=hh:mm:ss.ss,yyyy-mm-dd,m/s,m,V,dBar\n"
-                  "[MeasurementData]\n>\n>\n");
+                  "[MeasurementData]\n>\n>");
     auto metadata = driver->displaySensorsParsed();
     ASSERT_NO_THROW(driver->startMeasuring(metadata));
     ASSERT_EQ(readWrittenCommand(), "display sensors\rmonitor\r");
@@ -238,13 +238,15 @@ TEST_F(TestDriverStartMeasuring,
     // Time,Date,SV,Depth,Vbat,Pressure
     writeMockData("11:26:01.10,2026-09-16,1499.773,0.25183,8.11,0.25346*0B\n");
 
-    Measurements m = driver->readMeasurements();
+    auto m = driver->readMeasurements();
+    ASSERT_TRUE(m.has_value());
+
     base::Time expected_time = base::Time::fromTimeValues(2026, 9, 16, 11, 26, 1, 100, 0);
-    ASSERT_EQ(expected_time, m.time);
-    ASSERT_NEAR(8.11, m.battery_voltage, 1e-5);
-    ASSERT_NEAR(0.025346, m.pressure.toBar(), 1e-5);
-    ASSERT_NEAR(1499.773, m.sound_velocity, 1e-3);
-    ASSERT_NEAR(0.25183, m.depth, 1e-5);
+    ASSERT_EQ(expected_time, m->time);
+    ASSERT_NEAR(8.11, m->battery_voltage, 1e-5);
+    ASSERT_NEAR(0.025346, m->pressure.toBar(), 1e-5);
+    ASSERT_NEAR(1499.773, m->sound_velocity, 1e-3);
+    ASSERT_NEAR(0.25183, m->depth, 1e-5);
 }
 
 TEST_F(TestDriverStartMeasuring, it_throws_if_a_configured_parameter_is_missing)
@@ -421,9 +423,9 @@ TEST(DriverTest, it_parses_display_sensors_text_correctly)
     ParsedDisplaySensors parsed = parseDisplaySensors(text);
 
     // Verify SensorMetadata
-    ASSERT_EQ(11, parsed.sensor_metadata.columns.size());
-    ASSERT_EQ("Port", parsed.sensor_metadata.columns[0]);
-    ASSERT_EQ("Parameter", parsed.sensor_metadata.columns[4]);
+    ASSERT_EQ(11, parsed.sensor_metadata.size());
+    ASSERT_EQ("Port", parsed.sensor_metadata[0]);
+    ASSERT_EQ("Parameter", parsed.sensor_metadata[4]);
 
     // Verify SensorData
     ASSERT_EQ(2, parsed.sensor_data.size());

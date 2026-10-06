@@ -93,9 +93,9 @@ namespace svp_aml_datalogger {
          * Blocks until a valid telemetry packet is read, stripped, validated against
          * its checksum, and parsed into a Measurements struct.
          *
-         * @return the measurements
+         * @return the measurements when there is a measurement packet
          */
-        Measurements readMeasurements();
+        std::optional<Measurements> readMeasurements();
 
         /**
          * @brief Parses a raw, single-line CSV telemetry output into a Measurements
@@ -156,7 +156,7 @@ namespace svp_aml_datalogger {
          * @throws std::runtime_error If there is any mismatch between configured
          * parameters and device output columns.
          */
-        void enforceConfiguration(MeasurementMetadata const& meta);
+        void validateMeasurementConfiguration(MeasurementMetadata const& meta);
 
         /**
          * @brief Retrieves the active list of column headers currently mapped in the
