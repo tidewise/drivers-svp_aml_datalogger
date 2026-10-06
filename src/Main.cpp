@@ -37,6 +37,7 @@ int usage()
          << "memory\")\n"
          << "  display-monitor  - Show current monitor settings (runs \"display "
          << "monitor\")\n"
+         << "  baudrate [rate]  - Set serial baud rate on the sensor\n"
          << "  configure        - Interactively configure the sensor settings and apply "
          << "them\n"
          << "  measure          - Connect, configure, and stream real-time measurements "
@@ -705,6 +706,48 @@ void handleRawCommand(string const& uri,
          << flush;
 }
 
+bool isSupportedBaudrate(std::string const& baudrate)
+{
+    static const std::set<std::string> supported = {"9600",
+        "19200",
+        "38400",
+        "57600",
+        "115200"};
+    return supported.count(baudrate) > 0;
+}
+
+void handleSetBaudrateCommand(string const& uri,
+    string const& baudrate_arg,
+    Configuration const& config,
+    bool debug)
+{
+    string baudrate = baudrate_arg;
+    if (baudrate.empty()) {
+        cout << "Enter desired baud rate (e.g. 9600, 19200, 38400, 57600, 115200): "
+             << flush;
+        if (!getline(cin, baudrate) || baudrate.empty()) {
+            cerr << "Error: No baud rate provided.\n";
+            return;
+        }
+        if (!isSupportedBaudrate(baudrate)) {
+            cerr << baudrate << " is not a supported baud rate.\n";
+            exit(1);
+        }
+    }
+
+    std::cout << "\nConnecting to " << uri << " ...\n";
+    auto driver = setupDriver(uri, config, debug);
+    std::cout << "  -> Connected successfully.\n";
+
+    string cmd = "set baud " + baudrate;
+    std::cout << "Sending command: " << cmd << " ...\n";
+    string reply = driver.sendCommandAndWaitForReply(cmd, Time::fromMilliseconds(1000));
+    cout << reply << flush;
+    std::cout << "Baud rate updated to " << baudrate << " on the device.\n";
+    std::cout
+        << "Note: You must now reconnect using the updated baud rate in your URI.\n";
+}
+
 void handleConfigureCommand(string const& uri, Configuration& config, bool debug)
 {
     std::cout << "\n[Step 1/2] Connecting to " << uri << " ...\n";
@@ -862,6 +905,7 @@ int main(int argc, char const* argv[])
     // Parse options (like debug)
     bool debug = false;
     string raw_cmd_arg = "";
+    string baudrate_arg = "";
     for (int i = 3; i < argc; ++i) {
         string arg(argv[i]);
         if (arg == "--debug" || arg == "-d") {
@@ -870,10 +914,18 @@ int main(int argc, char const* argv[])
         else if (command == "raw" && raw_cmd_arg.empty()) {
             raw_cmd_arg = arg;
         }
+        else if (command == "baudrate" && baudrate_arg.empty()) {
+            baudrate_arg = arg;
+        }
     }
 
     if (command == "raw" && raw_cmd_arg.empty() && argc > 3) {
         raw_cmd_arg = argv[3];
+    }
+    if (command == "baudrate" && baudrate_arg.empty() && argc > 3) {
+        if (string(argv[3]) != "--debug" && string(argv[3]) != "-d") {
+            baudrate_arg = argv[3];
+        }
     }
 
     // Set up standard prototyping/driver configuration
@@ -898,6 +950,9 @@ int main(int argc, char const* argv[])
                 return 1;
             }
             handleRawCommand(uri, raw_cmd_arg, config, debug);
+        }
+        else if (command == "baudrate") {
+            handleSetBaudrateCommand(uri, baudrate_arg, config, debug);
         }
         else if (command == "configure") {
             handleConfigureCommand(uri, config, debug);
