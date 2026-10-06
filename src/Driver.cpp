@@ -1,3 +1,4 @@
+#include "Exceptions.hpp"
 #include <base-logging/Logging.hpp>
 #include <base-logging/logging/logging_printf_style.h>
 #include <cstdint>
@@ -36,7 +37,7 @@ void Driver::configure(Configuration const& configuration)
     try {
         auto commands = m_config.configurationCommands();
         LOG_DEBUG_S << "Configuring device with " << commands.size() << " commands...";
-        for (auto cmd : commands) {
+        for (auto const& cmd : commands) {
             try {
                 sendCommand(cmd, m_write_timeout);
                 readUntilPrompt(m_read_timeout);
@@ -62,7 +63,7 @@ void Driver::startMeasuring(ParsedDisplaySensors const& sensors_metadata)
             << "trying to start measure mode but the device mode is already measuring";
         return;
     }
-    enforceConfiguration(sensors_metadata.measurement_metadata);
+    validateMeasurementConfiguration(sensors_metadata.measurement_metadata);
 
     // Send the measuring command after reading and verifying metadata
     std::string measuring_command =
@@ -98,14 +99,14 @@ void Driver::stopMeasuring()
     m_columns.clear();
 }
 
-void Driver::enforceConfiguration(MeasurementMetadata const& meta)
+void Driver::validateMeasurementConfiguration(MeasurementMetadata const& meta)
 {
     if (meta.columns.empty()) {
         throw std::runtime_error("Received empty columns list from device metadata");
     }
 
     uint16_t metadata_mask = 0;
-    for (MeasuredParameters param : meta.columns) {
+    for (MeasuredParameters const& param : meta.columns) {
         auto configurable_measure_param =
             measuredParameterToConfigurableMeasurement(param);
         if (configurable_measure_param.has_value()) {
@@ -155,26 +156,15 @@ int Driver::extractPacket(uint8_t const* buffer, size_t buffer_size) const
     return 0;
 }
 
-Measurements Driver::readMeasurements()
+std::optional<Measurements> Driver::readMeasurements()
 {
     uint8_t buffer[MAX_PACKET_SIZE];
-    while (true) {
-        int packet_size = readPacket(buffer, MAX_PACKET_SIZE);
-        if (packet_size <= 0) {
-            continue;
-        }
-        std::string line(reinterpret_cast<char const*>(buffer), packet_size);
-        try {
-            return parseMeasurementLine(line, m_columns);
-        }
-        catch (ChecksumError const& e) {
-            throw;
-        }
-        catch (std::exception const& e) {
-            // Non-measurement line, such as a header or configuration.
-            // Continue reading standard telemetry lines.
-        }
+    int packet_size = readPacket(buffer, MAX_PACKET_SIZE);
+    if (packet_size <= 0) {
+        return {};
     }
+    std::string line(reinterpret_cast<char const*>(buffer), packet_size);
+    return parseMeasurementLine(line, m_columns);
 }
 
 std::string Driver::stripAndValidateChecksum(std::string const& line)
@@ -185,7 +175,7 @@ std::string Driver::stripAndValidateChecksum(std::string const& line)
     }
 
     std::string payload_str = line.substr(0, star_pos);
-    std::string checksum_str = trim(line.substr(star_pos + 1));
+    std::string checksum_str = line.substr(star_pos + 1);
 
     if (checksum_str.empty()) {
         throw ChecksumError("Empty checksum in line: " + line);
@@ -197,8 +187,14 @@ std::string Driver::stripAndValidateChecksum(std::string const& line)
     }
 
     unsigned int received_checksum = 0;
-    char extra;
-    if (std::sscanf(checksum_str.c_str(), "%x%c", &received_checksum, &extra) != 1) {
+    std::istringstream ss(checksum_str);
+    ss >> std::hex >> received_checksum;
+    if (ss.fail()) {
+        throw ChecksumError("Invalid checksum format: " + checksum_str);
+    }
+
+    std::string trailing;
+    if (ss >> trailing) {
         throw ChecksumError("Invalid checksum format: " + checksum_str);
     }
 
@@ -215,14 +211,8 @@ std::string Driver::stripAndValidateChecksum(std::string const& line)
 Measurements Driver::parseMeasurementLine(std::string const& raw_line,
     std::vector<MeasuredParameters> const& columns)
 {
-    std::string line = raw_line;
-    // Strip \r and \n from the line. These characters can only be at the end of the line,
-    // due to how extractPacket work
-    while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) {
-        line.pop_back();
-    }
-
-    if (trim(line).empty()) {
+    std::string line = trim(raw_line);
+    if (line.empty()) {
         throw std::runtime_error("Empty line");
     }
 

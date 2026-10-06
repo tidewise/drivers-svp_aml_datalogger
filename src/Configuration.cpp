@@ -1,3 +1,4 @@
+#include <base/Time.hpp>
 #include <sstream>
 #include <string>
 #include <svp_aml_datalogger/CLIMode.hpp>
@@ -121,6 +122,12 @@ vector<string> Configuration::configurationCommands() const
     // Secure mode gates some functionalities, such as toggling the charge state as a
     // measured parameter
     commands.push_back("secure on");
+
+    base::Time now = base::Time::now();
+    ostringstream full_time_cmd;
+    full_time_cmd << "set fulltime "
+                  << now.toString(base::Time::Seconds, "%Y-%m-%d %H:%M:%S");
+    commands.push_back(full_time_cmd.str());
 
     auto sampling_cmds =
         samplingCommands(sampling_mode, sampling_trigger, burst_parameters);

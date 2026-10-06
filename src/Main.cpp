@@ -46,7 +46,7 @@ int usage()
          << "Options:\n"
          << "  --debug, -d      - Enable detailed debug and raw packet logs\n"
          << flush;
-    return 1;
+    return 0;
 }
 
 Driver setupDriver(string const& uri, Configuration const& config, bool debug)
@@ -643,9 +643,9 @@ void handleDisplayCommand(string const& uri,
                 "================================================\n";
 
         cout << "Sensor Metadata Header Columns:\n  ";
-        for (size_t i = 0; i < parsed.sensor_metadata.columns.size(); ++i) {
-            cout << parsed.sensor_metadata.columns[i];
-            if (i < parsed.sensor_metadata.columns.size() - 1)
+        for (size_t i = 0; i < parsed.sensor_metadata.size(); ++i) {
+            cout << parsed.sensor_metadata[i];
+            if (i < parsed.sensor_metadata.size() - 1)
                 cout << ", ";
         }
         cout << "\n\nActive Sensor Channels:\n";
@@ -829,8 +829,10 @@ void handleMeasureCommand(string const& uri, Configuration const& config, bool d
 
     while (!g_stop_measuring) {
         try {
-            Measurements m = driver.readMeasurements();
-            printMeasurementRow(driver.getMeasurementColumns(), m);
+            auto m = driver.readMeasurements();
+            if (m.has_value()) {
+                printMeasurementRow(driver.getMeasurementColumns(), *m);
+            }
             usleep(100000);
         }
         catch (iodrivers_base::TimeoutError const&) {
@@ -905,7 +907,8 @@ int main(int argc, char const* argv[])
         }
         else {
             cerr << "Error: Unknown command '" << command << "'\n\n";
-            return usage();
+            usage();
+            return 1;
         }
     }
     catch (std::exception const& e) {
