@@ -158,10 +158,10 @@ namespace svp_aml_datalogger {
         ostringstream out;
         out << "set derive " << parameter;
         if ((bitfield & bit) != 0) {
-            out << "y";
+            out << " y";
         }
         else {
-            out << "n";
+            out << " n";
         }
         return out.str();
     }
